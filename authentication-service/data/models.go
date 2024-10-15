@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -38,7 +39,7 @@ type User struct {
 	FirstName string    `json:"first_name,omitempty"`
 	LastName  string    `json:"last_name,omitempty"`
 	Password  string    `json:"-"`
-	Active    int       `json:"active"`
+	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:created_at`
 	UpdatedAt time.Time `json:updated_at`
 }
@@ -88,11 +89,21 @@ func (u *User) GetByEmail(email string) (*User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeOut)
 	defer cancel()
 
-	query := `select id, email, first_name, last_name, password, user_active, created_at, updated_at from users`
+	// In ra giá trị email được truyền vào để kiểm tra
+	log.Printf("Executing GetByEmail with email: %s", email)
+
+	// Câu lệnh SQL với điều kiện lọc email
+	query := `SELECT id, email, first_name, last_name, password, user_active, created_at, updated_at 
+	          FROM users
+	          WHERE email = $1`
 
 	var user User
 
+	// Thực hiện truy vấn với giá trị email
 	row := db.QueryRowContext(ctx, query, email)
+
+	// Quét dữ liệu từ kết quả trả về và ghi log trước khi quét
+	log.Printf("Query executed, scanning result for email: %s", email)
 
 	err := row.Scan(
 		&user.ID,
@@ -105,9 +116,22 @@ func (u *User) GetByEmail(email string) (*User, error) {
 		&user.UpdatedAt,
 	)
 
+	// Xử lý lỗi nếu có
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// Ghi log nếu không tìm thấy người dùng
+			log.Printf("No user found with email: %s", email)
+			return nil, errors.New("no user found with that email")
+		}
+		// Ghi log lỗi khác
+		log.Printf("Error scanning user with email: %s, error: %v", email, err)
 		return nil, err
 	}
+
+	// Ghi log nếu tìm thấy người dùng
+	log.Printf("User found with email: %s, ID: %d", user.Email, user.ID)
+
+	// Trả về người dùng nếu tìm thấy
 	return &user, nil
 }
 
@@ -117,12 +141,17 @@ func (u *User) GetOne(id int) (*User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeOut)
 	defer cancel()
 
-	query := `select id, email, first_name, last_name, password, user_active, created_at, updated_at from users`
+	// Câu lệnh SQL có điều kiện lọc theo id
+	query := `SELECT id, email, first_name, last_name, password, user_active, created_at, updated_at 
+	          FROM users 
+	          WHERE id = $1`
 
 	var user User
 
+	// Thực hiện truy vấn với tham số id
 	row := db.QueryRowContext(ctx, query, id)
 
+	// Quét dữ liệu từ kết quả truy vấn
 	err := row.Scan(
 		&user.ID,
 		&user.Email,
@@ -134,9 +163,16 @@ func (u *User) GetOne(id int) (*User, error) {
 		&user.UpdatedAt,
 	)
 
+	// Xử lý lỗi nếu có
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// Trả về nil và lỗi nếu không tìm thấy người dùng
+			return nil, errors.New("no user found with that ID")
+		}
 		return nil, err
 	}
+
+	// Trả về người dùng nếu tìm thấy
 	return &user, nil
 }
 
@@ -202,29 +238,37 @@ func (u *User) DeleteByID(id int) error {
 	return nil
 }
 
-// Insert inserts a new user into the database, and returns the ID of the newly inserted row
-
 func (u *User) Insert(user User) (int, error) {
+	// Tạo một context với timeout
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeOut)
 	defer cancel()
 
+	// Hash mật khẩu người dùng với bcrypt và log lỗi nếu có
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), 12)
 	if err != nil {
 		return 0, err
 	}
 
-	var newId int
-	stmt := `insert into users (email, first_name, last_name, password, user_active, created_at, updated_at)
-	values ($1,$2,$3,$4,$5,$6,$7) returning id`
+	// Lấy thời gian hiện tại để sử dụng cho cả created_at và updated_at
+	now := time.Now()
 
+	log.Printf("Inserting user: %s, %s, %s", user.Email, user.FirstName, user.LastName)
+
+	// Câu lệnh SQL chèn người dùng mới vào cơ sở dữ liệu
+	stmt := `insert into public.users (email, first_name, last_name, password, user_active, created_at, updated_at)
+			 values ($1, $2, $3, $4, $5, $6, $7) returning id`
+
+	var newId int
+
+	// Thực hiện câu lệnh chèn với các tham số và lấy id mới
 	err = db.QueryRowContext(ctx, stmt,
 		user.Email,
 		user.FirstName,
 		user.LastName,
 		hashedPassword,
 		user.Active,
-		time.Now(),
-		time.Now(),
+		now,
+		now,
 	).Scan(&newId)
 
 	if err != nil {

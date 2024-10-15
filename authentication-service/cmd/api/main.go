@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	_ "github.com/lib/pq"
+
 	_ "github.com/jackc/pgconn"
 	_ "github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
@@ -53,7 +55,7 @@ func main() {
 }
 
 func openDB(dsn string) (*sql.DB, error) {
-	db, err := sql.Open("pxg", dsn)
+	db, err := sql.Open("postgres", dsn) // Đúng driver
 	if err != nil {
 		return nil, err
 	}
