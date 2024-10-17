@@ -10,6 +10,16 @@ services:
       - "8081:81"
     networks:
       - app-network
+  
+  logger-service:
+    build:
+      context: ./../logger-service
+      dockerfile: ./../logger-service/logger-service.dockerfile
+    restart: always
+    ports:
+      - "8083:83"
+    networks:
+      - app-network
 
   authentication-service:
     build:
@@ -36,6 +46,19 @@ services:
       - ./db-data/postgres:/var/lib/postgresql/data
     networks:
       - app-network
+
+  mongo:
+    image: 'mongo:4.2.16-bionic'
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=logs
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - ./db-data/mongo/:/data/db
+
+
 
 networks:
   app-network:
