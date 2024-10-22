@@ -57,8 +57,8 @@ services:
       - MONGO_INITDB_ROOT_PASSWORD=password
     volumes:
       - ./db-data/mongo/:/data/db
-
-
+    networks:
+      - app-network
 
 networks:
   app-network:
